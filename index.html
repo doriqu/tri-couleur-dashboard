@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tri Couleur — IoT Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/5.3.4/mqtt.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg:#0f1117;--bg2:#1a1d27;--bg3:#22263a;
+  --border:#2e3350;--text:#e2e8f0;--muted:#8892a4;
+  --accent:#7F77DD;--accent2:rgba(127,119,221,.12);
+  --red:#E24B4A;--green:#639922;--yellow:#EF9F27;--other:#9B59B6;
+  --led-g:#22c55e;--led-y:#facc15;--led-r:#ef4444;
+  --sidebar:62px;
+}
+[data-theme="light"]{
+  --bg:#f4f5f9;--bg2:#fff;--bg3:#eef0f6;
+  --border:#d0d4e8;--text:#1a1d27;--muted:#6b7280;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:13px;overflow:hidden}
+.app{display:flex;height:100vh}
+
+/* ── SIDEBAR ── */
+.sidebar{width:var(--sidebar);background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:2px;flex-shrink:0}
+.logo{width:36px;height:36px;border-radius:9px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;margin-bottom:8px}
+.nav-item{width:44px;height:48px;border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);gap:3px;transition:all .15s;border:1px solid transparent}
+.nav-item .icon{font-size:18px}
+.nav-item .nl{font-size:8px;line-height:1;text-align:center}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--bg3);color:var(--accent);border-color:var(--border)}
+.nav-spacer{flex:1}
+.nav-div{width:30px;height:1px;background:var(--border);margin:3px 0}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* ── TOPBAR ── */
+.topbar{height:48px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:8px;flex-shrink:0}
+.page-title{font-size:14px;font-weight:600;flex:1}
+.page-desc{font-size:11px;color:var(--muted);flex:1;margin-top:1px}
+
+/* LED bar */
+.led-bar{display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 9px}
+.led{width:9px;height:9px;border-radius:50%;opacity:.2;transition:opacity .3s,box-shadow .3s}
+.led.on{opacity:1}
+.led.blink{animation:blink .6s ease-in-out infinite}
+.led-g{background:var(--led-g)}.led-g.on{box-shadow:0 0 5px var(--led-g)}
+.led-y{background:var(--led-y)}.led-y.on{box-shadow:0 0 5px var(--led-y)}
+.led-r{background:var(--led-r)}.led-r.on{box-shadow:0 0 5px var(--led-r)}
+.led-label{font-size:10px;color:var(--muted)}
+@keyframes blink{0%,100%{opacity:.2}50%{opacity:1}}
+
+/* MQTT badge */
+.badge{display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 9px;font-size:11px;color:var(--muted)}
+.mdot{width:6px;height:6px;border-radius:50%;background:#6b7280;transition:background .3s;flex-shrink:0}
+.mdot.on{background:#22c55e}.mdot.err{background:var(--red)}
+
+/* Lang dropdown */
+.lw{position:relative}
+.lbtn{display:flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text);font-size:11px}
+.lbtn:hover{border-color:var(--accent)}
+.ldd{position:absolute;top:calc(100% + 5px);right:0;background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;min-width:120px;display:none;z-index:100}
+.ldd.open{display:block}
+.lopt{padding:7px 12px;cursor:pointer;font-size:12px;color:var(--text);display:flex;align-items:center;gap:7px}
+.lopt:hover{background:var(--bg3)}
+.lopt.sel{color:var(--accent)}
+.tbtn{width:28px;height:28px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center}
+.tbtn:hover{color:var(--text);background:var(--bg3)}
+
+/* ── PANEL ── */
+.panel{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.clabel{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.cval{font-size:26px;font-weight:600;line-height:1}
+.csub{font-size:11px;color:var(--muted);margin-top:3px}
+
+/* grids */
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* color accent bar on counter cards */
+.ccard{border-top:3px solid var(--c,var(--border))}
+
+/* progress bar inline */
+.pbar{height:4px;background:var(--bg3);border-radius:2px;margin-top:6px;overflow:hidden}
+.pfill{height:100%;border-radius:2px;transition:width .5s}
+
+/* ── LAST OBJECT ── */
+.obj-row{display:flex;align-items:center;gap:12px}
+.cube{width:54px;height:54px;border-radius:9px;flex-shrink:0;transition:background .4s;background:var(--bg3)}
+.obj-info .otitle{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.obj-info .oval{font-size:18px;font-weight:600;margin-bottom:6px}
+.tags{display:flex;gap:4px;flex-wrap:wrap}
+.tag{font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid var(--border);color:var(--muted)}
+
+/* ── STATUS ROWS ── */
+.srows{display:flex;flex-direction:column;gap:6px}
+.srow{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+.sk{color:var(--muted);display:flex;align-items:center;gap:4px}
+.sv{font-weight:500}
+.pill{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600}
+.pill-on{background:#14532d;color:#4ade80}
+.pill-off{background:#450a0a;color:#f87171}
+.pill-pause{background:#422006;color:#fb923c}
+.pill-fb{background:#1a3a5c;color:#60a5fa}
+.servo-track{height:4px;background:var(--bg3);border-radius:2px;flex:1;margin:0 7px;overflow:hidden}
+.servo-fill{height:100%;background:var(--accent);border-radius:2px;transition:width .4s}
+
+/* ── CHART ── */
+.chart-wrap{position:relative}
+
+/* ── LIVE PAGE ── */
+.live-big{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+.rgb-display{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:6px}
+.rgb-cell{background:var(--bg3);border-radius:7px;padding:8px;text-align:center}
+.rgb-cell .rl{font-size:10px;color:var(--muted);margin-bottom:2px}
+.rgb-cell .rv{font-size:16px;font-weight:600}
+
+/* ── HISTORY PAGE ── */
+.filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.fchip{padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:11px;color:var(--muted);transition:all .15s}
+.fchip:hover{border-color:var(--accent);color:var(--accent)}
+.fchip.active-chip{background:var(--accent);border-color:var(--accent);color:#fff}
+.fchip.chip-red.active-chip{background:var(--red);border-color:var(--red)}
+.fchip.chip-green.active-chip{background:var(--green);border-color:var(--green)}
+.fchip.chip-yellow.active-chip{background:var(--yellow);border-color:var(--yellow);color:#000}
+.fchip.chip-other.active-chip{background:var(--other);border-color:var(--other)}
+.hlog{display:flex;flex-direction:column;gap:4px;max-height:calc(100vh - 220px);overflow-y:auto}
+.hitem{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;background:var(--bg3);font-size:12px;animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
+.hdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.htime{color:var(--muted);min-width:130px;font-variant-numeric:tabular-nums}
+.hcolor{font-weight:500;min-width:60px}
+.hdetail{color:var(--muted);flex:1}
+.hempty{color:var(--muted);font-size:12px;padding:20px 0;text-align:center}
+.export-btn{padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:11px;margin-left:auto}
+.export-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── CONTROL PAGE ── */
+.ctrl-section{display:flex;flex-direction:column;gap:10px}
+.ctrl-block{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
+.ctrl-title{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
+.ctrl-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cbtn{display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 14px;border-radius:8px;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px;font-weight:500;transition:all .15s;min-width:68px}
+.cbtn .ci{font-size:20px}
+.cbtn:hover{border-color:var(--accent);color:var(--accent)}
+.cbtn.active-c{border-color:var(--accent);background:var(--accent2);color:var(--accent)}
+.cbtn.danger-c{border-color:var(--red);background:rgba(226,75,74,.08);color:var(--red)}
+.cbtn.danger-c:hover{background:rgba(226,75,74,.18)}
+.angle-btns{display:flex;gap:7px;flex-wrap:wrap}
+.abtn{padding:8px 14px;border-radius:7px;border:1px solid var(--border);background:var(--bg3);cursor:pointer;font-size:12px;font-weight:500;color:var(--text);transition:all .15s}
+.abtn:hover{border-color:var(--accent);color:var(--accent)}
+.abtn.active-a{color:#fff;border-color:transparent}
+.state-ind{display:flex;align-items:center;gap:7px;font-size:12px;padding:7px 11px;background:var(--bg3);border-radius:7px;border:1px solid var(--border)}
+.sdot{width:8px;height:8px;border-radius:50%}
+
+/* ── SYSTEM PAGE ── */
+.sys-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sys-m{background:var(--bg3);border-radius:8px;padding:11px}
+.sys-m .sl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.sys-m .sv2{font-size:18px;font-weight:600}
+.mform{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.mform input{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:12px;width:100%}
+.mform input:focus{outline:none;border-color:var(--accent)}
+.fl{font-size:10px;color:var(--muted);margin-bottom:3px}
+.btn{padding:7px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid;transition:opacity .15s}
+.btn-p{background:var(--accent);border-color:var(--accent);color:#fff}.btn-p:hover{opacity:.85}
+.btn-g{background:transparent;border-color:var(--border);color:var(--muted)}.btn-g:hover{border-color:var(--red);color:var(--red)}
+.btn-d{background:#450a0a;border-color:var(--red);color:var(--red)}.btn-d:hover{opacity:.8}
+.sim-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+
+@media(max-width:700px){.g4{grid-template-columns:repeat(2,1fr)}.g3{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){.g4,.g3,.g2{grid-template-columns:1fr}}
+</style>
+</head>
+<body data-theme="dark">
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="logo">⚙</div>
+    <div class="nav-item active" data-page="overview" onclick="showPage('overview')">
+      <span class="icon">⊞</span><span class="nl" data-i18n="nav_overview">Vue</span>
+    </div>
+    <div class="nav-item" data-page="live" onclick="showPage('live')">
+      <span class="icon">〜</span><span class="nl" data-i18n="nav_live">Live</span>
+    </div>
+    <div class="nav-item" data-page="history" onclick="showPage('history')">
+      <span class="icon">📋</span><span class="nl" data-i18n="nav_history">Hist.</span>
+    </div>
+    <div class="nav-item" data-page="control" onclick="showPage('control')">
+      <span class="icon">⌖</span><span class="nl" data-i18n="nav_control">Cmd</span>
+    </div>
+    <div class="nav-item" data-page="system" onclick="showPage('system')">
+      <span class="icon">◎</span><span class="nl" data-i18n="nav_system">Sys</span>
+    </div>
+    <div class="nav-spacer"></div>
+    <div class="nav-div"></div>
+    <div class="nav-item" onclick="toggleTheme()">
+      <span id="theme-icon" style="font-size:14px">☀</span>
+      <span class="nl" data-i18n="nav_theme">Thème</span>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div class="main">
+    <header class="topbar">
+      <div style="flex:1;min-width:0">
+        <div class="page-title" id="page-title">Vue d'ensemble</div>
+        <div class="page-desc" id="page-desc">Compteurs, dernier objet et état du système</div>
+      </div>
+      <div class="led-bar">
+        <span class="led led-g" id="led-g"></span>
+        <span class="led led-y" id="led-y"></span>
+        <span class="led led-r" id="led-r"></span>
+        <span class="led-label" id="led-label">—</span>
+      </div>
+      <div class="lw">
+        <button class="lbtn" onclick="toggleLang()">🌐 <span id="lang-label">FR</span> ▾</button>
+        <div class="ldd" id="ldd">
+          <div class="lopt sel" onclick="setLang('fr')">🇫🇷 Français</div>
+          <div class="lopt" onclick="setLang('en')">🇬🇧 English</div>
+          <div class="lopt" onclick="setLang('de')">🇩🇪 Deutsch</div>
+          <div class="lopt" onclick="setLang('zh')">🇨🇳 中文</div>
+        </div>
+      </div>
+      <div class="badge">
+        <span class="mdot" id="mdot"></span>
+        <span id="mqtt-label">MQTT</span>
+      </div>
+      <div class="badge">
+        <span class="mdot" id="fbdot"></span>
+        <span id="fb-label">Firebase</span>
+      </div>
+      <button class="tbtn" onclick="toggleTheme()"><span id="theme-icon2">☀</span></button>
+    </header>
+
+    <!-- ═══ PAGE: OVERVIEW ═══ -->
+    <div id="page-overview" class="panel">
+      <div class="g4">
+        <div class="card ccard" style="--c:var(--border)">
+          <div class="clabel" data-i18n="label_total">Total trié</div>
+          <div class="cval" id="cnt-total">0</div>
+          <div class="csub" data-i18n="label_objects">objets ce cycle</div>
+        </div>
+        <div class="card ccard" style="--c:var(--red)">
+          <div class="clabel" style="color:var(--red)" data-i18n="color_red">Rouge</div>
+          <div class="cval" id="cnt-red" style="color:var(--red)">0</div>
+          <div class="pbar"><div class="pfill" id="bar-red" style="background:var(--red);width:0%"></div></div>
+          <div class="csub" id="pct-red">0% — Bac #1 — 0°</div>
+        </div>
+        <div class="card ccard" style="--c:var(--green)">
+          <div class="clabel" style="color:var(--green)" data-i18n="color_green">Vert</div>
+          <div class="cval" id="cnt-green" style="color:var(--green)">0</div>
+          <div class="pbar"><div class="pfill" id="bar-green" style="background:var(--green);width:0%"></div></div>
+          <div class="csub" id="pct-green">0% — Bac #2 — 90°</div>
+        </div>
+        <div class="card ccard" style="--c:var(--yellow)">
+          <div class="clabel" style="color:var(--yellow)" data-i18n="color_yellow">Jaune</div>
+          <div class="cval" id="cnt-yellow" style="color:var(--yellow)">0</div>
+          <div class="pbar"><div class="pfill" id="bar-yellow" style="background:var(--yellow);width:0%"></div></div>
+          <div class="csub" id="pct-yellow">0% — Bac #3 — 180°</div>
+        </div>
+      </div>
+
+      <div class="g3">
+        <div class="card obj-row">
+          <div class="cube" id="last-cube"></div>
+          <div class="obj-info">
+            <div class="otitle" data-i18n="label_last_obj">Dernier objet détecté</div>
+            <div class="oval" id="last-label">—</div>
+            <div class="tags" id="last-tags"><span class="tag" data-i18n="tag_waiting">En attente...</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="clabel" data-i18n="label_distribution">Répartition</div>
+          <div class="chart-wrap" style="height:100px;margin-top:4px"><canvas id="bar-chart"></canvas></div>
+        </div>
+
+        <div class="card">
+          <div class="clabel" data-i18n="label_system">État système</div>
+          <div class="srows" style="margin-top:4px">
+            <div class="srow">
+              <span class="sk">⇒ <span data-i18n="label_belt">Tapis</span></span>
+              <span class="pill pill-off" id="belt-pill">—</span>
+            </div>
+            <div class="srow">
+              <span class="sk">↻ Servo</span>
+              <span class="sv" id="servo-ov">—°</span>
+            </div>
+            <div class="srow" style="align-items:center">
+              <span class="sk" style="font-size:10px">0°</span>
+              <div class="servo-track"><div class="servo-fill" id="servo-fill-ov" style="width:0%"></div></div>
+              <span class="sk" style="font-size:10px">360°</span>
+            </div>
+            <div class="srow">
+              <span class="sk">⬡ GY-33</span>
+              <span class="sv" id="gy33-ov">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Autres counter -->
+      <div class="card" style="display:flex;align-items:center;gap:16px">
+        <div style="flex-shrink:0">
+          <div class="clabel" style="color:var(--other)" data-i18n="color_other">Autres</div>
+          <div class="cval" id="cnt-other" style="color:var(--other)">0</div>
+          <div class="csub" id="pct-other">0% — Bac #4 — 270°</div>
+        </div>
+        <div class="pbar" style="flex:1;height:6px"><div class="pfill" id="bar-other" style="background:var(--other);width:0%"></div></div>
+        <div style="font-size:11px;color:var(--muted);max-width:280px" data-i18n="other_desc">Couleurs non classifiées. LED jaune clignote 2s à chaque détection.</div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE: LIVE ═══ -->
+    <div id="page-live" class="panel" style="display:none">
+      <div class="g2">
+        <div class="card">
+          <div class="clabel" data-i18n="label_last_obj">Dernier objet détecté</div>
+          <div class="obj-row" style="margin-top:6px">
+            <div class="cube" id="live-cube" style="width:64px;height:64px"></div>
+            <div class="obj-info">
+              <div class="oval" id="live-label" style="font-size:22px">—</div>
+              <div class="tags" id="live-tags" style="margin-top:6px"></div>
+            </div>
+          </div>
+          <div class="rgb-display">
+            <div class="rgb-cell"><div class="rl">R</div><div class="rv" id="live-r" style="color:#E24B4A">—</div></div>
+            <div class="rgb-cell"><div class="rl">G</div><div class="rv" id="live-g" style="color:#639922">—</div></div>
+            <div class="rgb-cell"><div class="rl">B</div><div class="rv" id="live-b" style="color:#378ADD">—</div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="clabel" data-i18n="label_system">État temps réel</div>
+          <div class="srows" style="margin-top:6px">
+            <div class="srow"><span class="sk">⇒ <span data-i18n="label_belt">Tapis</span></span><span class="pill pill-off" id="live-belt-pill">—</span></div>
+            <div class="srow"><span class="sk">↻ Servo</span><span class="sv" id="live-servo">—°</span></div>
+            <div class="srow"><span class="sk">⌁ MQTT</span><span class="pill pill-off" id="mqtt-pill-live">—</span></div>
+            <div class="srow"><span class="sk">☁ Firebase</span><span class="pill pill-off" id="fb-pill-live">—</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="clabel" data-i18n="label_rate">Flux — objets / minute</div>
+        <div class="chart-wrap" style="height:180px;margin-top:6px"><canvas id="line-live"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE: HISTORY ═══ -->
+    <div id="page-history" class="panel" style="display:none">
+      <div class="card" style="padding:10px 14px">
+        <div class="filter-bar">
+          <span style="font-size:11px;color:var(--muted)" data-i18n="filter_label">Filtrer :</span>
+          <button class="fchip active-chip" onclick="setFilter('all',this)" data-i18n="filter_all">Tous</button>
+          <button class="fchip chip-red" onclick="setFilter('rouge',this)" data-i18n="color_red">Rouge</button>
+          <button class="fchip chip-green" onclick="setFilter('vert',this)" data-i18n="color_green">Vert</button>
+          <button class="fchip chip-yellow" onclick="setFilter('jaune',this)" data-i18n="color_yellow">Jaune</button>
+          <button class="fchip chip-other" onclick="setFilter('autres',this)" data-i18n="color_other">Autres</button>
+          <input type="date" id="filter-date" onchange="applyFilters()" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px">
+          <button class="export-btn" onclick="exportCSV()" data-i18n="btn_export">⬇ Export CSV</button>
+          <button class="export-btn" onclick="clearFirebase()" style="color:var(--red);border-color:var(--red)" data-i18n="btn_clear_db">🗑 Vider Firebase</button>
+        </div>
+        <div id="hist-count" style="font-size:11px;color:var(--muted);margin-bottom:8px">0 événements</div>
+        <div class="hlog" id="hist-list"><div class="hempty" data-i18n="hist_empty">Chargement de l'historique Firebase...</div></div>
+      </div>
+    </div>
+
+    <!-- ═══ PAGE: CONTROL ═══ -->
+    <div id="page-control" class="panel" style="display:none">
+      <div class="ctrl-section">
+
+        <div class="ctrl-block">
+          <div class="ctrl-title" data-i18n="ctrl_belt">Tapis roulant</div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <div class="ctrl-row">
+              <div class="cbtn" id="cbtn-play" onclick="sendCmd('play')">
+                <span class="ci">▶</span><span data-i18n="cmd_play">Play</span>
+              </div>
+              <div class="cbtn" id="cbtn-pause" onclick="sendCmd('pause')">
+                <span class="ci">⏸</span><span data-i18n="cmd_pause">Pause</span>
+              </div>
+              <div class="cbtn danger-c" id="cbtn-stop" onclick="sendCmd('stop')">
+                <span class="ci">⏹</span><span data-i18n="cmd_stop">Stop</span>
+              </div>
+            </div>
+            <div class="state-ind">
+              <span class="sdot" id="state-dot" style="background:var(--muted)"></span>
+              <span id="state-text" data-i18n="state_unknown">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ctrl-block">
+          <div class="ctrl-title" data-i18n="ctrl_servo">Servomoteur MG995 — angle cible</div>
+          <div class="angle-btns">
+            <button class="abtn" onclick="sendAngle(0)" style="border-left:3px solid var(--red)">0° — <span data-i18n="color_red">Rouge</span></button>
+            <button class="abtn" onclick="sendAngle(90)" style="border-left:3px solid var(--green)">90° — <span data-i18n="color_green">Vert</span></button>
+            <button class="abtn" onclick="sendAngle(180)" style="border-left:3px solid var(--yellow)">180° — <span data-i18n="color_yellow">Jaune</span></button>
+            <button class="abtn" onclick="sendAngle(270)" style="border-left:3px solid var(--other)">270° — <span data-i18n="color_other">Autres</span></button>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:10px">
+            <span style="font-size:11px;color:var(--muted)">0°</span>
+            <div class="servo-track" style="flex:1"><div class="servo-fill" id="servo-fill-ctrl" style="width:0%"></div></div>
+            <span style="font-size:11px;color:var(--muted)">360°</span>
+            <span style="font-size:12px;font-weight:600;min-width:34px;text-align:right" id="servo-val-ctrl">—°</span>
+          </div>
+        </div>
+
+        <div class="ctrl-block">
+          <div class="ctrl-title" data-i18n="ctrl_leds">Voyants physiques ESP8266</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:8px;background:var(--bg3);padding:10px 14px;border-radius:8px;border:1px solid var(--border)">
+              <span class="led led-g" id="ctrl-led-g" style="width:13px;height:13px"></span>
+              <span style="font-size:12px" data-i18n="led_active">Actif — tri en cours</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;background:var(--bg3);padding:10px 14px;border-radius:8px;border:1px solid var(--border)">
+              <span class="led led-y" id="ctrl-led-y" style="width:13px;height:13px"></span>
+              <span style="font-size:12px" data-i18n="led_pause">Pause / Couleur ambiguë</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;background:var(--bg3);padding:10px 14px;border-radius:8px;border:1px solid var(--border)">
+              <span class="led led-r" id="ctrl-led-r" style="width:13px;height:13px"></span>
+              <span style="font-size:12px" data-i18n="led_stop">Stop / Erreur</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="ctrl-block" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div>
+            <div class="ctrl-title" data-i18n="ctrl_reset">Compteurs</div>
+            <div style="font-size:11px;color:var(--muted)" data-i18n="reset_note">Remet à zéro les stats affichées. N'affecte pas l'ESP ni Firebase.</div>
+          </div>
+          <button class="btn btn-d" onclick="confirmReset()" data-i18n="btn_reset">Remettre à zéro</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══ PAGE: SYSTEM ═══ -->
+    <div id="page-system" class="panel" style="display:none">
+      <div class="card">
+        <div class="ctrl-title" style="margin-bottom:10px" data-i18n="label_mqtt_config">Configuration MQTT</div>
+        <div class="mform">
+          <div><div class="fl">Broker</div><input id="cfg-broker" value="broker.hivemq.com"></div>
+          <div><div class="fl">Port WebSocket</div><input type="number" id="cfg-port" value="8884"></div>
+          <div><div class="fl">Topic objets</div><input id="cfg-topic-obj" value="tri/objet"></div>
+          <div><div class="fl">Topic commandes</div><input id="cfg-topic-cmd" value="tri/commande"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-p" onclick="connectMQTT()" data-i18n="btn_connect">Connecter</button>
+          <button class="btn btn-g" onclick="disconnectMQTT()" data-i18n="btn_disconnect">Déconnecter</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ctrl-title" style="margin-bottom:10px">Firebase Realtime Database</div>
+        <div class="srows">
+          <div class="srow"><span class="sk">URL</span><span class="sv" style="font-size:11px;color:var(--muted)" id="fb-url-display">—</span></div>
+          <div class="srow"><span class="sk">Statut</span><span class="pill pill-fb" id="fb-status-pill">Initialisé</span></div>
+          <div class="srow"><span class="sk">Entrées enregistrées</span><span class="sv" id="fb-count">0</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ctrl-title" style="margin-bottom:8px" data-i18n="label_metrics">Métriques session</div>
+        <div class="sys-grid">
+          <div class="sys-m"><div class="sl" data-i18n="label_total">Total trié</div><div class="sv2" id="sys-total">0</div></div>
+          <div class="sys-m"><div class="sl" data-i18n="label_session">Durée session</div><div class="sv2" id="sys-uptime">00:00</div></div>
+          <div class="sys-m"><div class="sl">Messages MQTT</div><div class="sv2" id="sys-msg">0</div></div>
+          <div class="sys-m"><div class="sl" data-i18n="label_rate">Débit moyen</div><div class="sv2" id="sys-rate">—</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ctrl-title" style="margin-bottom:8px" data-i18n="sim_title">Simulation (sans ESP8266)</div>
+        <div class="sim-row">
+          <button class="btn btn-p" style="background:var(--red);border-color:var(--red)" onclick="sim('rouge')" data-i18n="color_red">Rouge</button>
+          <button class="btn btn-p" style="background:var(--green);border-color:var(--green)" onclick="sim('vert')" data-i18n="color_green">Vert</button>
+          <button class="btn btn-p" style="background:var(--yellow);border-color:var(--yellow);color:#000" onclick="sim('jaune')" data-i18n="color_yellow">Jaune</button>
+          <button class="btn btn-p" style="background:var(--other);border-color:var(--other)" onclick="sim('autres')" data-i18n="color_other">Autres</button>
+          <button class="btn btn-p" onclick="startAutoSim()" data-i18n="btn_auto">▶ Auto</button>
+          <button class="btn btn-g" onclick="stopAutoSim()" data-i18n="btn_stop">■ Stop</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── FIREBASE CONFIG ────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyDkF9TalsgD-ttStP5Wx3rl8VFne6PN_7c",
+  authDomain: "tri-couleur.firebaseapp.com",
+  databaseURL: "https://tri-couleur-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "tri-couleur",
+  storageBucket: "tri-couleur.firebasestorage.app",
+  messagingSenderId: "1082103739624",
+  appId: "1:1082103739624:web:264e44d09cb43ccb11c55d"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const histRef = db.ref('historique');
+let fbCount = 0;
+document.getElementById('fb-url-display').textContent = firebaseConfig.databaseURL;
+
+// ── COLORS ────────────────────────────────────────────────────────────────────
+const COLORS = {
+  rouge:  { css:'#E24B4A', servo:0,   bac:1 },
+  vert:   { css:'#639922', servo:90,  bac:2 },
+  jaune:  { css:'#EF9F27', servo:180, bac:3 },
+  autres: { css:'#9B59B6', servo:270, bac:4 }
+};
+
+// ── I18N ──────────────────────────────────────────────────────────────────────
+const I18N = {
+  fr:{
+    nav_overview:'Vue',nav_live:'Live',nav_history:'Hist.',nav_control:'Cmd',nav_system:'Sys',nav_theme:'Thème',
+    title_overview:'Vue d\'ensemble',desc_overview:'Compteurs, dernier objet et état du système',
+    title_live:'Temps réel',desc_live:'Flux live, valeurs brutes GY-33 et graphique',
+    title_history:'Historique',desc_history:'Journal complet depuis Firebase — filtrable et exportable',
+    title_control:'Commandes',desc_control:'Contrôle du tapis, du servo et des voyants',
+    title_system:'Système',desc_system:'Configuration MQTT, Firebase et simulation',
+    label_total:'Total trié',label_objects:'objets ce cycle',label_last_obj:'Dernier objet détecté',
+    label_distribution:'Répartition',label_system:'État système',label_belt:'Tapis',
+    label_rate:'Objets / minute',label_mqtt_config:'Configuration MQTT',label_session:'Durée session',label_metrics:'Métriques session',
+    color_red:'Rouge',color_green:'Vert',color_yellow:'Jaune',color_other:'Autres',
+    tag_waiting:'En attente...',other_desc:'Couleurs non classifiées. LED jaune clignote 2s.',
+    filter_label:'Filtrer :',filter_all:'Tous',hist_empty:'Aucun événement.',
+    btn_export:'⬇ Export CSV',btn_connect:'Connecter',btn_disconnect:'Déconnecter',
+    btn_reset:'Remettre à zéro',btn_auto:'▶ Auto',btn_stop:'■ Stop',
+    ctrl_belt:'Tapis roulant',ctrl_servo:'Servomoteur MG995 — angle cible',
+    ctrl_leds:'Voyants physiques ESP8266',ctrl_reset:'Compteurs',
+    reset_note:'Remet à zéro les stats affichées. N\'affecte pas l\'ESP ni Firebase.',
+    cmd_play:'Play',cmd_pause:'Pause',cmd_stop:'Stop',
+    led_active:'Actif — tri en cours',led_pause:'Pause / Couleur ambiguë',led_stop:'Stop / Erreur',
+    state_unknown:'—',state_play:'En cours',state_pause:'En pause',state_stop:'Arrêté',
+    belt_on:'ACTIF',belt_pause:'PAUSE',belt_off:'ARRÊT',
+    mqtt_on:'Connecté',mqtt_off:'Déconnecté',mqtt_connecting:'Connexion...',
+    fb_on:'Connecté',fb_off:'Déconnecté',
+    sim_title:'Simulation (sans ESP8266)',
+  },
+  en:{
+    nav_overview:'View',nav_live:'Live',nav_history:'Hist.',nav_control:'Ctrl',nav_system:'Sys',nav_theme:'Theme',
+    title_overview:'Overview',desc_overview:'Counters, last object and system status',
+    title_live:'Real-time',desc_live:'Live feed, raw GY-33 values and chart',
+    title_history:'History',desc_history:'Full log from Firebase — filterable and exportable',
+    title_control:'Controls',desc_control:'Belt, servo and LED control',
+    title_system:'System',desc_system:'MQTT, Firebase config and simulation',
+    label_total:'Total sorted',label_objects:'objects',label_last_obj:'Last detected object',
+    label_distribution:'Distribution',label_system:'System status',label_belt:'Belt',
+    label_rate:'Objects / min',label_mqtt_config:'MQTT Configuration',label_session:'Session time',label_metrics:'Session metrics',
+    color_red:'Red',color_green:'Green',color_yellow:'Yellow',color_other:'Others',
+    tag_waiting:'Waiting...',other_desc:'Unclassified colors. Yellow LED blinks 2s.',
+    filter_label:'Filter:',filter_all:'All',hist_empty:'No events.',
+    btn_export:'⬇ Export CSV',btn_connect:'Connect',btn_disconnect:'Disconnect',
+    btn_reset:'Reset counters',btn_auto:'▶ Auto',btn_stop:'■ Stop',
+    ctrl_belt:'Conveyor belt',ctrl_servo:'MG995 servo — target angle',
+    ctrl_leds:'Physical LEDs on ESP8266',ctrl_reset:'Counters',
+    reset_note:'Resets displayed stats only. Does not affect ESP or Firebase.',
+    cmd_play:'Play',cmd_pause:'Pause',cmd_stop:'Stop',
+    led_active:'Active — sorting',led_pause:'Pause / Ambiguous color',led_stop:'Stop / Error',
+    state_unknown:'—',state_play:'Running',state_pause:'Paused',state_stop:'Stopped',
+    belt_on:'ACTIVE',belt_pause:'PAUSED',belt_off:'STOPPED',
+    mqtt_on:'Connected',mqtt_off:'Disconnected',mqtt_connecting:'Connecting...',
+    fb_on:'Connected',fb_off:'Disconnected',
+    sim_title:'Simulation (no ESP8266)',
+  },
+  de:{
+    nav_overview:'Übers.',nav_live:'Live',nav_history:'Hist.',nav_control:'Str.',nav_system:'Sys',nav_theme:'Thema',
+    title_overview:'Übersicht',desc_overview:'Zähler, letztes Objekt und Systemstatus',
+    title_live:'Echtzeit',desc_live:'Live-Daten, GY-33-Rohwerte und Diagramm',
+    title_history:'Verlauf',desc_history:'Vollständiges Protokoll aus Firebase',
+    title_control:'Steuerung',desc_control:'Band, Servo und LED-Steuerung',
+    title_system:'System',desc_system:'MQTT- und Firebase-Konfiguration',
+    label_total:'Gesamt',label_objects:'Objekte',label_last_obj:'Letztes Objekt',
+    label_distribution:'Verteilung',label_system:'Systemstatus',label_belt:'Band',
+    label_rate:'Objekte / Min.',label_mqtt_config:'MQTT-Konfiguration',label_session:'Sitzungsdauer',label_metrics:'Sitzungsmetriken',
+    color_red:'Rot',color_green:'Grün',color_yellow:'Gelb',color_other:'Andere',
+    tag_waiting:'Warten...',other_desc:'Unbekannte Farben. Gelbe LED blinkt 2s.',
+    filter_label:'Filter:',filter_all:'Alle',hist_empty:'Keine Ereignisse.',
+    btn_export:'⬇ CSV Export',btn_connect:'Verbinden',btn_disconnect:'Trennen',
+    btn_reset:'Zurücksetzen',btn_auto:'▶ Auto',btn_stop:'■ Stop',
+    ctrl_belt:'Förderband',ctrl_servo:'MG995-Servo — Zielwinkel',
+    ctrl_leds:'Physische LEDs am ESP8266',ctrl_reset:'Zähler',
+    reset_note:'Setzt nur die angezeigten Stats zurück.',
+    cmd_play:'Play',cmd_pause:'Pause',cmd_stop:'Stop',
+    led_active:'Aktiv — Sortierung',led_pause:'Pause / Unbekannt',led_stop:'Stop / Fehler',
+    state_unknown:'—',state_play:'Läuft',state_pause:'Pausiert',state_stop:'Gestoppt',
+    belt_on:'AKTIV',belt_pause:'PAUSE',belt_off:'STOP',
+    mqtt_on:'Verbunden',mqtt_off:'Getrennt',mqtt_connecting:'Verbindet...',
+    fb_on:'Verbunden',fb_off:'Getrennt',
+    sim_title:'Simulation (ohne ESP8266)',
+  },
+  zh:{
+    nav_overview:'概览',nav_live:'实时',nav_history:'历史',nav_control:'控制',nav_system:'系统',nav_theme:'主题',
+    title_overview:'系统概览',desc_overview:'计数器、最近对象和系统状态',
+    title_live:'实时监控',desc_live:'实时数据流、GY-33原始值和图表',
+    title_history:'历史记录',desc_history:'Firebase完整日志 — 可过滤和导出',
+    title_control:'控制台',desc_control:'传送带、舵机和指示灯控制',
+    title_system:'系统设置',desc_system:'MQTT和Firebase配置',
+    label_total:'已分拣总量',label_objects:'个',label_last_obj:'最近检测对象',
+    label_distribution:'颜色分布',label_system:'系统状态',label_belt:'传送带',
+    label_rate:'对象/分钟',label_mqtt_config:'MQTT配置',label_session:'会话时长',label_metrics:'会话指标',
+    color_red:'红色',color_green:'绿色',color_yellow:'黄色',color_other:'其他',
+    tag_waiting:'等待中...',other_desc:'未识别颜色。黄色LED闪烁2秒。',
+    filter_label:'筛选：',filter_all:'全部',hist_empty:'暂无事件。',
+    btn_export:'⬇ 导出CSV',btn_connect:'连接',btn_disconnect:'断开',
+    btn_reset:'重置计数器',btn_auto:'▶ 自动',btn_stop:'■ 停止',
+    ctrl_belt:'传送带',ctrl_servo:'MG995舵机 — 目标角度',
+    ctrl_leds:'ESP8266物理指示灯',ctrl_reset:'计数器',
+    reset_note:'仅重置显示的统计数据，不影响ESP或Firebase。',
+    cmd_play:'运行',cmd_pause:'暂停',cmd_stop:'停止',
+    led_active:'运行中 — 分拣',led_pause:'暂停 / 未知颜色',led_stop:'停止 / 故障',
+    state_unknown:'—',state_play:'运行中',state_pause:'已暂停',state_stop:'已停止',
+    belt_on:'运行',belt_pause:'暂停',belt_off:'停止',
+    mqtt_on:'已连接',mqtt_off:'未连接',mqtt_connecting:'连接中...',
+    fb_on:'已连接',fb_off:'未连接',
+    sim_title:'模拟测试 (无ESP8266)',
+  }
+};
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let lang='fr', isDark=true;
+let counts={rouge:0,vert:0,jaune:0,autres:0};
+let allEvents=[], filteredEvents=[], activeFilter='all';
+let msgCount=0, sessionStart=Date.now();
+let mqttClient=null, autoSimTimer=null;
+let currentPage='overview', sysState='unknown', currentServo=0;
+let blinkTimer=null;
+
+// ── I18N ENGINE ───────────────────────────────────────────────────────────────
+function t(k){return(I18N[lang]&&I18N[lang][k])||k}
+function applyI18n(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>el.textContent=t(el.getAttribute('data-i18n')));
+  document.getElementById('page-title').textContent=t('title_'+currentPage);
+  document.getElementById('page-desc').textContent=t('desc_'+currentPage);
+  refreshSysState(sysState);
+  refreshMqttUI();
+}
+function setLang(l){
+  lang=l;
+  const lm={fr:'FR',en:'EN',de:'DE',zh:'中文'};
+  document.getElementById('lang-label').textContent=lm[l];
+  document.querySelectorAll('.lopt').forEach(el=>el.classList.remove('sel'));
+  document.querySelector(`.lopt[onclick="setLang('${l}')"]`).classList.add('sel');
+  document.getElementById('ldd').classList.remove('open');
+  applyI18n();
+  renderHistory();
+}
+function toggleLang(){document.getElementById('ldd').classList.toggle('open')}
+document.addEventListener('click',e=>{if(!e.target.closest('.lw'))document.getElementById('ldd').classList.remove('open')});
+
+function toggleTheme(){
+  isDark=!isDark;
+  document.body.setAttribute('data-theme',isDark?'dark':'light');
+  ['theme-icon','theme-icon2'].forEach(id=>document.getElementById(id).textContent=isDark?'☀':'☾');
+  updateBarChart();
+}
+
+// ── PAGES ─────────────────────────────────────────────────────────────────────
+function showPage(p){
+  currentPage=p;
+  document.querySelectorAll('.panel').forEach(el=>el.style.display='none');
+  document.getElementById('page-'+p).style.display='flex';
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  document.querySelector(`.nav-item[data-page="${p}"]`).classList.add('active');
+  document.getElementById('page-title').textContent=t('title_'+p);
+  document.getElementById('page-desc').textContent=t('desc_'+p);
+}
+
+// ── CHARTS ────────────────────────────────────────────────────────────────────
+let barChart, lineLive;
+const COLOR_CSS=['#E24B4A','#639922','#EF9F27','#9B59B6'];
+const lineOpts={responsive:true,maintainAspectRatio:false,
+  plugins:{legend:{display:false}},
+  elements:{point:{radius:0},line:{tension:0.4}},
+  scales:{
+    x:{display:false},
+    y:{grid:{color:'rgba(128,128,128,.1)'},ticks:{color:'#8892a4',font:{size:10}},beginAtZero:true}
+  }};
+
+function initCharts(){
+  barChart=new Chart(document.getElementById('bar-chart'),{
+    type:'bar',
+    data:{labels:[t('color_red'),t('color_green'),t('color_yellow'),t('color_other')],
+      datasets:[{data:[0,0,0,0],backgroundColor:COLOR_CSS,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{grid:{display:false},ticks:{color:'#8892a4',font:{size:10}}},
+        y:{grid:{color:'rgba(128,128,128,.1)'},ticks:{color:'#8892a4',font:{size:10}},beginAtZero:true}}}
+  });
+  lineLive=new Chart(document.getElementById('line-live'),{type:'line',
+    data:{labels:Array(30).fill(''),datasets:[{data:Array(30).fill(0),
+      borderColor:'#7F77DD',backgroundColor:'rgba(127,119,221,.12)',fill:true,borderWidth:2}]},
+    options:lineOpts});
+}
+function updateBarChart(){
+  if(!barChart)return;
+  barChart.data.datasets[0].data=[counts.rouge,counts.vert,counts.jaune,counts.autres];
+  barChart.update('none');
+}
+function pushRate(v){
+  if(!lineLive)return;
+  lineLive.data.datasets[0].data.push(v);
+  lineLive.data.datasets[0].data.shift();
+  lineLive.update('none');
+}
+
+// ── PROCESS OBJECT ────────────────────────────────────────────────────────────
+function processObject(color, extra={}){
+  if(!COLORS[color])return;
+  counts[color]++;msgCount++;
+  const total=Object.values(counts).reduce((a,b)=>a+b,0);
+  const css=COLORS[color].css;
+  const servo=extra.servo!==undefined?extra.servo:COLORS[color].servo;
+  const bac=COLORS[color].bac;
+  const now=new Date();
+  const timeStr=now.toISOString();
+  const label=getLabel(color);
+
+  // Update counters + bars
+  document.getElementById('cnt-total').textContent=total;
+  const keys={rouge:'red',vert:'green',jaune:'yellow',autres:'other'};
+  Object.entries(keys).forEach(([c,k])=>{
+    const pct=total>0?Math.round(counts[c]/total*100):0;
+    document.getElementById('cnt-'+k).textContent=counts[c];
+    document.getElementById('pct-'+k).textContent=`${pct}% — Bac #${COLORS[c].bac} — ${COLORS[c].servo}°`;
+    document.getElementById('bar-'+k).style.width=pct+'%';
+  });
+
+  // Last object — Overview
+  setEl('last-cube','style.background',css);
+  setEl('last-label','textContent',label);
+  document.getElementById('last-tags').innerHTML=
+    `<span class="tag">${servo}°</span><span class="tag">Bac #${bac}</span><span class="tag">${now.toTimeString().slice(0,8)}</span>`;
+
+  // Live page
+  setEl('live-cube','style.background',css);
+  setEl('live-label','textContent',label);
+  document.getElementById('live-tags').innerHTML=
+    `<span class="tag">${servo}°</span><span class="tag">Bac #${bac}</span>`;
+  if(extra.r!==undefined){
+    setEl('live-r','textContent',extra.r);
+    setEl('live-g','textContent',extra.g);
+    setEl('live-b','textContent',extra.b);
+  }
+
+  // Servo
+  updateServoDisplay(servo);
+
+  // GY-33
+  const gy=document.getElementById('gy33-ov');
+  if(gy){gy.textContent='OK';gy.style.color='#22c55e'}
+
+  // LEDs
+  if(color==='autres')blinkLed();else setLed('green');
+
+  // Charts
+  updateBarChart();
+
+  // Firebase write
+  const entry={couleur:color,label,servo,bac,timestamp:timeStr,r:extra.r||0,g:extra.g||0,b:extra.b||0};
+  histRef.push(entry).then(()=>{
+    fbCount++;
+    setEl('fb-count','textContent',fbCount);
+    setFbStatus(true);
+  }).catch(()=>setFbStatus(false));
+
+  // Local events list (for history page if Firebase fails)
+  allEvents.unshift({...entry,id:Date.now()});
+  if(allEvents.length>500)allEvents.pop();
+
+  document.getElementById('sys-total').textContent=total;
+  document.getElementById('sys-msg').textContent=msgCount;
+}
+
+function getLabel(color){
+  const m={rouge:t('color_red'),vert:t('color_green'),jaune:t('color_yellow'),autres:t('color_other')};
+  return m[color]||color;
+}
+function setEl(id,prop,val){
+  const el=document.getElementById(id);if(!el)return;
+  if(prop==='textContent')el.textContent=val;
+  else if(prop==='style.background')el.style.background=val;
+}
+
+// ── SERVO ─────────────────────────────────────────────────────────────────────
+function updateServoDisplay(angle){
+  currentServo=angle;
+  const pct=Math.round(angle/360*100)+'%';
+  ['servo-fill-ov','servo-fill-ctrl'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.width=pct});
+  ['servo-ov','live-servo','servo-val-ctrl'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=angle+'°'});
+  document.querySelectorAll('.abtn').forEach(btn=>{
+    const idx=parseInt(btn.textContent);
+    const active=idx===angle;
+    btn.classList.toggle('active-a',active);
+    btn.style.background=active?COLOR_CSS[[0,90,180,270].indexOf(angle)]||'':'' ;
+  });
+}
+
+// ── SYSTEM STATE ──────────────────────────────────────────────────────────────
+function refreshSysState(state){
+  sysState=state;
+  const dot=document.getElementById('state-dot');
+  const txt=document.getElementById('state-text');
+  ['cbtn-play','cbtn-pause','cbtn-stop'].forEach(id=>document.getElementById(id)?.classList.remove('active-c'));
+  const bpill=document.getElementById('belt-pill');
+  const lpill=document.getElementById('live-belt-pill');
+  if(state==='play'){
+    if(dot)dot.style.background='var(--led-g)';
+    if(txt)txt.textContent=t('state_play');
+    document.getElementById('cbtn-play')?.classList.add('active-c');
+    if(bpill){bpill.textContent=t('belt_on');bpill.className='pill pill-on'}
+    if(lpill){lpill.textContent=t('belt_on');lpill.className='pill pill-on'}
+    setLed('green');
+  }else if(state==='pause'){
+    if(dot)dot.style.background='var(--led-y)';
+    if(txt)txt.textContent=t('state_pause');
+    document.getElementById('cbtn-pause')?.classList.add('active-c');
+    if(bpill){bpill.textContent=t('belt_pause');bpill.className='pill pill-pause'}
+    if(lpill){lpill.textContent=t('belt_pause');lpill.className='pill pill-pause'}
+    setLed('yellow');
+  }else if(state==='stop'){
+    if(dot)dot.style.background='var(--led-r)';
+    if(txt)txt.textContent=t('state_stop');
+    document.getElementById('cbtn-stop')?.classList.add('active-c');
+    if(bpill){bpill.textContent=t('belt_off');bpill.className='pill pill-off'}
+    if(lpill){lpill.textContent=t('belt_off');lpill.className='pill pill-off'}
+    setLed('red');
+    updateServoDisplay(0);
+  }else{
+    if(dot)dot.style.background='var(--muted)';
+    if(txt)txt.textContent=t('state_unknown');
+    setLed('none');
+  }
+}
+
+// ── LEDs ──────────────────────────────────────────────────────────────────────
+function setLed(color){
+  if(blinkTimer){clearTimeout(blinkTimer);blinkTimer=null}
+  const ids=['led-g','led-y','led-r','ctrl-led-g','ctrl-led-y','ctrl-led-r'];
+  ids.forEach(id=>document.getElementById(id)?.classList.remove('on','blink'));
+  const label=document.getElementById('led-label');
+  const map={green:['led-g','ctrl-led-g'],yellow:['led-y','ctrl-led-y'],red:['led-r','ctrl-led-r']};
+  if(map[color]){
+    map[color].forEach(id=>document.getElementById(id)?.classList.add('on'));
+    if(label)label.textContent=t(color==='green'?'led_active':color==='yellow'?'led_pause':'led_stop');
+  }else{
+    if(label)label.textContent='—';
+  }
+}
+function blinkLed(){
+  setLed('none');
+  ['led-y','ctrl-led-y'].forEach(id=>document.getElementById(id)?.classList.add('on','blink'));
+  const label=document.getElementById('led-label');
+  if(label)label.textContent=t('led_pause');
+  blinkTimer=setTimeout(()=>{
+    ['led-y','ctrl-led-y'].forEach(id=>document.getElementById(id)?.classList.remove('blink'));
+    if(sysState==='play')setLed('green');
+    else if(sysState==='pause')setLed('yellow');
+    else if(sysState==='stop')setLed('red');
+    else setLed('none');
+  },2000);
+}
+
+// ── COMMANDS ──────────────────────────────────────────────────────────────────
+function sendCmd(cmd){
+  const topic=document.getElementById('cfg-topic-cmd')?.value||'tri/commande';
+  if(mqttClient?.connected)mqttClient.publish(topic,JSON.stringify({commande:cmd,ts:Date.now()}));
+  refreshSysState(cmd==='play'?'play':cmd==='pause'?'pause':'stop');
+}
+function sendAngle(angle){
+  const topic=document.getElementById('cfg-topic-cmd')?.value||'tri/commande';
+  if(mqttClient?.connected)mqttClient.publish(topic,JSON.stringify({commande:'servo',angle,ts:Date.now()}));
+  updateServoDisplay(angle);
+}
+function confirmReset(){
+  if(confirm(lang==='fr'?'Remettre tous les compteurs à zéro ?':'Reset all counters?')){
+    counts={rouge:0,vert:0,jaune:0,autres:0};
+    ['cnt-total','cnt-red','cnt-green','cnt-yellow','cnt-other'].forEach(id=>setEl(id,'textContent','0'));
+    ['pct-red','pct-green','pct-yellow','pct-other'].forEach(id=>{
+      const el=document.getElementById(id);if(el)el.textContent='0%';
+    });
+    ['bar-red','bar-green','bar-yellow','bar-other'].forEach(id=>{
+      const el=document.getElementById(id);if(el)el.style.width='0%';
+    });
+    updateBarChart();
+    document.getElementById('sys-total').textContent='0';
+  }
+}
+
+// ── MQTT ──────────────────────────────────────────────────────────────────────
+function refreshMqttUI(){
+  const on=mqttClient?.connected;
+  const dot=document.getElementById('mdot');
+  const label=document.getElementById('mqtt-label');
+  const pill=document.getElementById('mqtt-pill-live');
+  if(dot)dot.className='mdot'+(on?' on':'');
+  if(label)label.textContent=t(on?'mqtt_on':'mqtt_off');
+  if(pill){pill.textContent=t(on?'mqtt_on':'mqtt_off');pill.className='pill '+(on?'pill-on':'pill-off')}
+}
+function setFbStatus(ok){
+  const dot=document.getElementById('fbdot');
+  const label=document.getElementById('fb-label');
+  const pill=document.getElementById('fb-pill-live');
+  const spill=document.getElementById('fb-status-pill');
+  if(dot)dot.className='mdot'+(ok?' on':' err');
+  if(label)label.textContent=t(ok?'fb_on':'fb_off');
+  if(pill){pill.textContent=t(ok?'fb_on':'fb_off');pill.className='pill '+(ok?'pill-on':'pill-off')}
+  if(spill){spill.textContent=t(ok?'fb_on':'fb_off');spill.className='pill '+(ok?'pill-on':'pill-off')}
+}
+function connectMQTT(){
+  const broker=document.getElementById('cfg-broker').value.trim();
+  const port=parseInt(document.getElementById('cfg-port').value);
+  const topicObj=document.getElementById('cfg-topic-obj').value.trim();
+  if(mqttClient)mqttClient.end(true);
+  document.getElementById('mqtt-label').textContent=t('mqtt_connecting');
+  mqttClient=mqtt.connect(`wss://${broker}:${port}/mqtt`,{
+    clientId:'tri_v3_'+Math.random().toString(16).slice(2,8),clean:true,reconnectPeriod:5000
+  });
+  mqttClient.on('connect',()=>{refreshMqttUI();mqttClient.subscribe(topicObj)});
+  mqttClient.on('error',()=>refreshMqttUI());
+  mqttClient.on('close',()=>refreshMqttUI());
+  mqttClient.on('message',(topic,payload)=>{
+    try{
+      const d=JSON.parse(payload.toString());
+      if(d.couleur)processObject(d.couleur,{servo:d.servo_angle,r:d.r,g:d.g,b:d.b});
+      if(d.etat)refreshSysState(d.etat);
+      if(d.servo_angle!==undefined)updateServoDisplay(d.servo_angle);
+    }catch(e){}
+  });
+}
+function disconnectMQTT(){if(mqttClient){mqttClient.end(true);mqttClient=null}refreshMqttUI()}
+
+// ── HISTORY ───────────────────────────────────────────────────────────────────
+let activeFilterColor='all';
+let histListenerActive=false;
+
+function startHistoryListener(){
+  if(histListenerActive)return;
+  histListenerActive=true;
+  document.getElementById('hist-list').innerHTML=`<div class="hempty">Connexion à Firebase...</div>`;
+  // Realtime listener — fires immediately and on every new entry
+  histRef.orderByChild('timestamp').on('value', snap=>{
+    allEvents=[];
+    snap.forEach(child=>allEvents.unshift({id:child.key,...child.val()}));
+    applyFilters();
+  }, err=>{
+    document.getElementById('hist-list').innerHTML=`<div class="hempty">Erreur Firebase — ${err.message}</div>`;
+  });
+}
+
+function setFilter(color,el){
+  activeFilterColor=color;
+  document.querySelectorAll('.fchip').forEach(c=>c.classList.remove('active-chip'));
+  el.classList.add('active-chip');
+  applyFilters();
+}
+
+function applyFilters(){
+  const dateVal=document.getElementById('filter-date').value;
+  filteredEvents=allEvents.filter(e=>{
+    const colorOk=activeFilterColor==='all'||e.couleur===activeFilterColor;
+    const dateOk=!dateVal||e.timestamp.startsWith(dateVal);
+    return colorOk&&dateOk;
+  });
+  renderHistory();
+}
+
+function renderHistory(){
+  const container=document.getElementById('hist-list');
+  const countEl=document.getElementById('hist-count');
+  if(!container)return;
+  if(countEl)countEl.textContent=`${filteredEvents.length} événement${filteredEvents.length>1?'s':''}`;
+  if(filteredEvents.length===0){
+    container.innerHTML=`<div class="hempty">${t('hist_empty')}</div>`;return;
+  }
+  container.innerHTML=filteredEvents.map(e=>{
+    const css=COLORS[e.couleur]?.css||'#888';
+    const label=getLabel(e.couleur);
+    const date=new Date(e.timestamp);
+    const locale={fr:'fr-FR',en:'en-GB',de:'de-DE',zh:'zh-CN'}[lang]||'fr-FR';
+    const dateStr=isNaN(date.getTime())?e.timestamp:date.toLocaleString(locale);
+    return`<div class="hitem">
+      <span class="hdot" style="background:${css}"></span>
+      <span class="htime">${dateStr}</span>
+      <span class="hcolor" style="color:${css}">${label}</span>
+      <span class="hdetail">Bac #${e.bac} — ${e.servo}° — R:${e.r||0} G:${e.g||0} B:${e.b||0}</span>
+    </div>`;
+  }).join('');
+}
+
+function exportCSV(){
+  // Always export from Firebase (allEvents = full Firebase data)
+  if(allEvents.length===0){
+    alert('Aucune donnée à exporter. Assurez-vous que Firebase est connecté.');return;
+  }
+  const headers='Timestamp,Couleur,Label,Bac,Servo (°),R,G,B';
+  const rows=filteredEvents.map(e=>{
+    const date=new Date(e.timestamp);
+    const dateStr=isNaN(date.getTime())?e.timestamp:date.toLocaleString('fr-FR');
+    return`"${dateStr}",${e.couleur},${getLabel(e.couleur)},${e.bac},${e.servo},${e.r||0},${e.g||0},${e.b||0}`;
+  });
+  const blob=new Blob(['\uFEFF'+[headers,...rows].join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`tri-couleur-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function clearFirebase(){
+  const msg=lang==='fr'?'Vider toute la base Firebase ? Cette action est irréversible.':
+    'Clear the entire Firebase database? This cannot be undone.';
+  if(!confirm(msg))return;
+  histRef.remove().then(()=>{
+    allEvents=[];filteredEvents=[];
+    renderHistory();
+    fbCount=0;
+    setEl('fb-count','textContent','0');
+    alert(lang==='fr'?'Base Firebase vidée avec succès.':'Firebase database cleared.');
+  }).catch(e=>alert('Erreur : '+e.message));
+}
+
+// ── SIMULATION ────────────────────────────────────────────────────────────────
+const SIM=['rouge','vert','jaune','autres'];
+function sim(color){if(sysState!=='stop')processObject(color,{servo:COLORS[color].servo,r:Math.floor(Math.random()*255),g:Math.floor(Math.random()*255),b:Math.floor(Math.random()*255)})}
+function startAutoSim(){stopAutoSim();refreshSysState('play');autoSimTimer=setInterval(()=>sim(SIM[Math.floor(Math.random()*4)]),1200)}
+function stopAutoSim(){if(autoSimTimer){clearInterval(autoSimTimer);autoSimTimer=null}}
+
+// ── SESSION TIMER ─────────────────────────────────────────────────────────────
+let lastMinCount=0;
+setInterval(()=>{
+  const e=Math.floor((Date.now()-sessionStart)/1000);
+  const el=document.getElementById('sys-uptime');
+  if(el)el.textContent=String(Math.floor(e/60)).padStart(2,'0')+':'+String(e%60).padStart(2,'0');
+},1000);
+setInterval(()=>{
+  pushRate(lastMinCount);
+  const total=Object.values(counts).reduce((a,b)=>a+b,0);
+  const mins=Math.max(1,Math.floor((Date.now()-sessionStart)/60000));
+  const el=document.getElementById('sys-rate');
+  if(el)el.textContent=Math.round(total/mins)+' obj/min';
+  lastMinCount=0;
+},60000);
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+initCharts();
+applyI18n();
+refreshMqttUI();
+refreshSysState('unknown');
+setFbStatus(false);
+// Firebase connection status
+db.ref('.info/connected').on('value',snap=>{setFbStatus(snap.val()===true)});
+// Start realtime history listener immediately (no need to click)
+startHistoryListener();
+</script>
+</body>
+</html>
