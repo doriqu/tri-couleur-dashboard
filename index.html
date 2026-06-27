@@ -216,11 +216,13 @@ input{font-family:var(--font)}
 .rgb-cell .rv{font-size:18px;font-weight:700;letter-spacing:-.3px}
 
 /* ── HISTORY ─────────────────────────────────────────────────────────────────── */
-.filter-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.filter-row{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.filter-chips{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.filter-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .fchip{
   padding:5px 12px;border-radius:20px;border:1px solid var(--border2);
   background:transparent;cursor:pointer;font-size:11px;font-weight:500;color:var(--text2);
-  transition:all .15s;
+  transition:all .15s;white-space:nowrap;
 }
 .fchip:hover{border-color:var(--accent);color:var(--accent)}
 .fchip.on{color:#fff;border-color:transparent}
@@ -232,11 +234,22 @@ input{font-family:var(--font)}
 .date-input{
   padding:5px 10px;border-radius:20px;border:1px solid var(--border2);
   background:var(--surface2);color:var(--text);font-size:11px;
-  color-scheme:dark;
+  color-scheme:dark;flex:1;min-width:120px;max-width:180px;
 }
 [data-theme="light"] .date-input{color-scheme:light}
 .hist-count{font-size:11px;color:var(--text3);margin-bottom:8px}
-.hlog{display:flex;flex-direction:column;gap:3px;max-height:calc(100dvh - 260px);overflow-y:auto}
+.btn-refresh{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:5px 12px;border-radius:20px;
+  border:1px solid var(--border2);background:transparent;
+  cursor:pointer;font-size:11px;font-weight:500;color:var(--text2);
+  transition:all .15s;white-space:nowrap;
+}
+.btn-refresh:hover{border-color:var(--accent);color:var(--accent)}
+.refresh-icon{display:inline-block;transition:transform .3s}
+.btn-refresh.spinning .refresh-icon{animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hlog{display:flex;flex-direction:column;gap:3px;overflow-y:auto;flex:1;min-height:0;max-height:calc(100dvh - 230px)}
 .hitem{
   display:grid;grid-template-columns:auto auto 1fr auto;
   align-items:center;gap:10px;padding:8px 12px;border-radius:var(--r);
@@ -405,11 +418,16 @@ input{font-family:var(--font)}
   .sys-grid{grid-template-columns:1fr 1fr}
   .hitem{grid-template-columns:auto 1fr auto;gap:7px}
   .hdet{display:none}
+  .filter-actions{flex-wrap:wrap}
+  .date-input{min-width:0;flex:1}
 }
 @media(max-width:480px){
   .g4{grid-template-columns:repeat(2,1fr)}
   .g3{grid-template-columns:1fr}
   .stat-val{font-size:24px}
+  .filter-chips{gap:4px}
+  .fchip{padding:4px 9px;font-size:10px}
+  .filter-actions .btn,.filter-actions .btn-danger,.filter-actions .btn-refresh{font-size:10px;padding:4px 9px}
 }
 
 /* ── LOGIN PAGE ──────────────────────────────────────────────────────────── */
@@ -708,25 +726,31 @@ input{font-family:var(--font)}
     <div id="page-history" class="panel" style="display:none">
       <div class="card">
         <div class="filter-row">
-          <button class="fchip on all" onclick="setFilter('all',this)" data-i18n="filter_all">All</button>
-          <button class="fchip rouge" onclick="setFilter('rouge',this)" data-i18n="color_red">Red</button>
-          <button class="fchip vert" onclick="setFilter('vert',this)" data-i18n="color_green">Green</button>
-          <button class="fchip jaune" onclick="setFilter('jaune',this)" data-i18n="color_yellow">Yellow</button>
-          <button class="fchip autres" onclick="setFilter('autres',this)" data-i18n="color_other">Others</button>
-          <button class="fchip" id="fchip-cmd" onclick="setFilter('commande',this)">⌖ Cmd</button>
-          <div style="display:flex;align-items:center;gap:4px;margin-left:auto">
-            <label style="font-size:10px;color:var(--text3);white-space:nowrap" data-i18n="lbl_filter_date">Date</label>
-            <input type="date" id="filter-date" class="date-input" onchange="applyFilters()" placeholder="dd/mm/yyyy" title="Filter by date">
+          <!-- Rangée 1 : filtres couleur -->
+          <div class="filter-chips">
+            <button class="fchip on all" onclick="setFilter('all',this)" data-i18n="filter_all">Tous</button>
+            <button class="fchip rouge" onclick="setFilter('rouge',this)" data-i18n="color_red">Rouge</button>
+            <button class="fchip vert" onclick="setFilter('vert',this)" data-i18n="color_green">Vert</button>
+            <button class="fchip jaune" onclick="setFilter('jaune',this)" data-i18n="color_yellow">Jaune</button>
+            <button class="fchip autres" onclick="setFilter('autres',this)" data-i18n="color_other">Autres</button>
+            <button class="fchip" id="fchip-cmd" onclick="setFilter('commande',this)">⌖ Cmd</button>
           </div>
-          <div style="position:relative">
-            <button class="btn btn-ghost" style="padding:5px 12px;font-size:11px" onclick="toggleExportMenu()" data-i18n="lbl_export">Export ▾</button>
-            <div id="export-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border2);border-radius:8px;overflow:hidden;min-width:110px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.3)">
-              <div onclick="exportAs('csv');toggleExportMenu()" style="padding:9px 14px;cursor:pointer;font-size:12px;color:var(--text)" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">📄 CSV</div>
-              <div onclick="exportAs('json');toggleExportMenu()" style="padding:9px 14px;cursor:pointer;font-size:12px;color:var(--text)" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">📋 JSON</div>
-              <div onclick="exportAs('txt');toggleExportMenu()" style="padding:9px 14px;cursor:pointer;font-size:12px;color:var(--text)" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">📝 TXT</div>
+          <!-- Rangée 2 : date + actions -->
+          <div class="filter-actions">
+            <input type="date" id="filter-date" class="date-input" onchange="applyFilters()" title="Filter by date">
+            <button class="btn-refresh" id="btn-refresh" onclick="refreshHistory()" data-i18n="btn_refresh">
+              <span class="refresh-icon">↻</span><span data-i18n="btn_refresh">Actualiser</span>
+            </button>
+            <div style="position:relative;margin-left:auto">
+              <button class="btn btn-ghost" style="padding:5px 12px;font-size:11px" onclick="toggleExportMenu()" data-i18n="lbl_export">Export ▾</button>
+              <div id="export-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--surface);border:1px solid var(--border2);border-radius:8px;overflow:hidden;min-width:110px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.3)">
+                <div onclick="exportAs('csv');toggleExportMenu()" style="padding:9px 14px;cursor:pointer;font-size:12px;color:var(--text)" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">📄 CSV</div>
+                <div onclick="exportAs('json');toggleExportMenu()" style="padding:9px 14px;cursor:pointer;font-size:12px;color:var(--text)" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">📋 JSON</div>
+                <div onclick="exportAs('txt');toggleExportMenu()" style="padding:9px 14px;cursor:pointer;font-size:12px;color:var(--text)" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">📝 TXT</div>
+              </div>
             </div>
+            <button class="btn btn-danger" style="padding:5px 12px;font-size:11px" onclick="clearFirebase()" data-i18n="lbl_clear_db">🗑 Vider</button>
           </div>
-          <button class="btn btn-danger" style="padding:5px 12px;font-size:11px" onclick="clearFirebase()" data-i18n="lbl_clear_db">🗑 Clear DB</button>
         </div>
         <div class="hist-count" id="hist-count">0 événements</div>
         <div class="hlog" id="hist-list"><div class="hempty" data-i18n="hist_loading">Connexion à Firebase...</div></div>
@@ -889,6 +913,11 @@ input{font-family:var(--font)}
     <div style="padding:8px 20px 4px">
       <div class="chip"><span class="chip-dot" id="mdot-m"></span><span id="mqtt-label-m">MQTT</span></div>
     </div>
+    <div class="mobile-menu-divider"></div>
+    <button class="mobile-menu-item" style="color:var(--red)" onclick="doLogout();closeMobileMenu()">
+      <span class="mi-icon">⏏</span>
+      <span data-i18n="btn_logout">Log out</span>
+    </button>
   </div>
 </div>
 
@@ -941,7 +970,7 @@ const I18N={
     belt_on:'ACTIF',belt_pause:'PAUSE',belt_off:'ARRÊT',
     mqtt_on:'Connecté',mqtt_off:'Déconnecté',mqtt_connecting:'Connexion...',
     fb_on:'Connecté',fb_off:'Déconnecté',lbl_fb_url:'URL',lbl_fb_status:'Statut',lbl_fb_entries:'Entrées enregistrées',lbl_mqtt_cfg:'Configuration MQTT',lbl_clear_db:'Vider la base Firebase',lbl_export:'Exporter',lbl_filter_date:'Date',
-    btn_logout:'Se déconnecter',logout_confirm:'Se déconnecter ?',sim_title:'Simulation (sans ESP8266)',theme_toggle:'Basculer thème',
+    btn_logout:'Se déconnecter',logout_confirm:'Se déconnecter ?',btn_refresh:'Actualiser',sim_title:'Simulation (sans ESP8266)',theme_toggle:'Basculer thème',
     label_session:'Durée session',filter_label:'Filtrer :'},
   en:{nav_overview:'Overview',nav_history:'History',nav_control:'Controls',nav_system:'System',nav_theme:'Theme',
     title_overview:'Overview',desc_overview:'Counters, last object and system status',
@@ -964,7 +993,7 @@ const I18N={
     belt_on:'ACTIVE',belt_pause:'PAUSED',belt_off:'STOPPED',
     mqtt_on:'Connected',mqtt_off:'Disconnected',mqtt_connecting:'Connecting...',
     fb_on:'Connected',fb_off:'Disconnected',lbl_fb_url:'URL',lbl_fb_status:'Status',lbl_fb_entries:'Saved entries',lbl_mqtt_cfg:'MQTT Configuration',lbl_clear_db:'Clear Firebase database',lbl_export:'Export',lbl_filter_date:'Date',
-    btn_logout:'Log out',logout_confirm:'Log out and return to login?',sim_title:'Simulation (no ESP8266)',theme_toggle:'Toggle theme',
+    btn_logout:'Log out',logout_confirm:'Log out and return to login?',btn_refresh:'Refresh',sim_title:'Simulation (no ESP8266)',theme_toggle:'Toggle theme',
     label_session:'Session time',filter_label:'Filter:'},
   de:{nav_overview:'Übersicht',nav_history:'Verlauf',nav_control:'Steuerung',nav_system:'System',nav_theme:'Thema',
     title_overview:'Übersicht',desc_overview:'Zähler, letztes Objekt und Systemstatus',
@@ -987,7 +1016,7 @@ const I18N={
     belt_on:'AKTIV',belt_pause:'PAUSE',belt_off:'STOP',
     mqtt_on:'Verbunden',mqtt_off:'Getrennt',mqtt_connecting:'Verbindet...',
     fb_on:'Verbunden',fb_off:'Getrennt',lbl_fb_url:'URL',lbl_fb_status:'Status',lbl_fb_entries:'Gespeicherte Einträge',lbl_mqtt_cfg:'MQTT-Konfiguration',lbl_clear_db:'Firebase-Datenbank leeren',lbl_export:'Exportieren',lbl_filter_date:'Datum',
-    btn_logout:'Abmelden',logout_confirm:'Abmelden?',sim_title:'Simulation (ohne ESP8266)',theme_toggle:'Thema wechseln',
+    btn_logout:'Abmelden',logout_confirm:'Abmelden?',btn_refresh:'Aktualisieren',sim_title:'Simulation (ohne ESP8266)',theme_toggle:'Thema wechseln',
     label_session:'Sitzungsdauer',filter_label:'Filter:'},
   zh:{nav_overview:'概览',nav_history:'历史',nav_control:'控制',nav_system:'系统',nav_theme:'主题',
     title_overview:'系统概览',desc_overview:'计数器、最近对象和系统状态',
@@ -1010,7 +1039,7 @@ const I18N={
     belt_on:'运行',belt_pause:'暂停',belt_off:'停止',
     mqtt_on:'已连接',mqtt_off:'未连接',mqtt_connecting:'连接中...',
     fb_on:'已连接',fb_off:'未连接',lbl_fb_url:'URL',lbl_fb_status:'状态',lbl_fb_entries:'已保存条目',lbl_mqtt_cfg:'MQTT配置',lbl_clear_db:'清空Firebase数据库',lbl_export:'导出',lbl_filter_date:'日期',
-    btn_logout:'退出登录',logout_confirm:'退出？',sim_title:'模拟测试 (无ESP8266)',theme_toggle:'切换主题',
+    btn_logout:'退出登录',logout_confirm:'退出？',btn_refresh:'刷新',sim_title:'模拟测试 (无ESP8266)',theme_toggle:'切换主题',
     label_session:'会话时长',filter_label:'筛选：'}
 };
 
@@ -1082,7 +1111,7 @@ function showPage(p){
   document.querySelectorAll(`[data-page="${p}"]`).forEach(el=>el.classList.add('active'));
   document.getElementById('page-title').textContent=t('title_'+p);
   document.getElementById('page-desc').textContent=t('desc_'+p);
-  if(p==='history'&&!histListenerOn)startHistoryListener();
+  if(p==='history'){startHistoryListener();}
 }
 
 // ── CHARTS ────────────────────────────────────────────────────────────────────
@@ -1171,7 +1200,7 @@ function processObject(color,extra={}){
   updateBarChart();
 
   // Firebase
-  const entry={couleur:color,label,servo,bac,timestamp:now.toISOString(),r:extra.r||0,g:extra.g||0,b:extra.b||0};
+  const entry={type:'objet',couleur:color,label,servo,bac,timestamp:now.toISOString(),r:extra.r||0,g:extra.g||0,b:extra.b||0};
   histRef.push(entry).then(()=>{fbCount++;g('fb-count').textContent=fbCount;setFbStatus(true)}).catch(()=>setFbStatus(false));
 
   // Session metrics
@@ -1263,6 +1292,7 @@ function sendCmd(cmd){
   histRef.push({type:'commande',action:cmd,etat:state,timestamp:new Date().toISOString()}).catch(()=>{});
 }
 function sendAngle(angle){
+  if(sysState==='pause'||sysState==='stop')return;
   const topic=g('cfg-topic-cmd')?.value||'tri/commande';
   if(mqttClient?.connected)mqttClient.publish(topic,JSON.stringify({commande:'servo',angle,ts:Date.now()}));
   updateServoDisplay(angle);
@@ -1318,18 +1348,32 @@ function connectMQTT(){
 function disconnectMQTT(){if(mqttClient){mqttClient.end(true);mqttClient=null}refreshMqttUI()}
 
 // ── HISTORY ───────────────────────────────────────────────────────────────────
+let _histQuery=null;
+
+function refreshHistory(){
+  const btn=document.getElementById('btn-refresh');
+  if(btn)btn.classList.add('spinning');
+  startHistoryListener();
+  setTimeout(()=>{if(btn)btn.classList.remove('spinning');},900);
+}
+
 function startHistoryListener(){
+  // Détacher l'ancien listener s'il existe pour forcer un rechargement propre
+  if(_histQuery){_histQuery.off('value');_histQuery=null;}
   histListenerOn=true;
-  g('hist-list').innerHTML=`<div class="hempty">${t('hist_loading')}</div>`;
-  histRef.orderByChild('timestamp').limitToLast(100).on('value',snap=>{
+  const list=g('hist-list');
+  if(list)list.innerHTML=`<div class="hempty">${t('hist_loading')}</div>`;
+  _histQuery=histRef.orderByChild('timestamp').limitToLast(100);
+  _histQuery.on('value',snap=>{
     allEvents=[];
     snap.forEach(child=>allEvents.unshift({id:child.key,...child.val()}));
-    fbCount=allEvents.length;
-    const el=g('fb-count');if(el)el.textContent=fbCount;
+    fbCount=allEvents.filter(e=>e.type==='objet'||!e.type).length;
+    const el=g('fb-count');if(el)el.textContent=allEvents.length;
     setFbStatus(true);
     applyFilters();
   },err=>{
-    g('hist-list').innerHTML=`<div class="hempty">Firebase error — ${err.message}</div>`;
+    const list=g('hist-list');
+    if(list)list.innerHTML=`<div class="hempty">Firebase error — ${err.message}</div>`;
     setFbStatus(false);
   });
 }
@@ -1340,12 +1384,17 @@ function setFilter(color,el){
   applyFilters();
 }
 function applyFilters(){
-  const dateVal=g('filter-date').value; // format: yyyy-mm-dd
+  const dateVal=g('filter-date').value;
   filteredEvents=allEvents.filter(e=>{
     let typeOk=false;
-    if(activeFilter==='all') typeOk=true;
-    else if(activeFilter==='commande') typeOk=(e.type==='commande'||e.type==='servo');
-    else typeOk=(e.couleur===activeFilter);
+    if(activeFilter==='all'){
+      typeOk=true;
+    } else if(activeFilter==='commande'){
+      typeOk=(e.type==='commande'||e.type==='servo');
+    } else {
+      // Filter by color — only 'objet' type entries
+      typeOk=(e.type==='objet'&&e.couleur===activeFilter)||(!e.type&&e.couleur===activeFilter);
+    }
     const dateOk=!dateVal||(e.timestamp&&e.timestamp.slice(0,10)===dateVal);
     return typeOk&&dateOk;
   });
@@ -1439,7 +1488,7 @@ function clearFirebase(){
 
 // ── SIMULATION ────────────────────────────────────────────────────────────────
 const SIM_COLORS=['rouge','vert','jaune','autres'];
-function sim(color){if(sysState!=='stop')processObject(color,{servo:COLORS[color].servo,r:Math.floor(Math.random()*255),g:Math.floor(Math.random()*255),b:Math.floor(Math.random()*255)})}
+function sim(color){if(sysState!=='stop'&&sysState!=='pause')processObject(color,{servo:COLORS[color].servo,r:Math.floor(Math.random()*255),g:Math.floor(Math.random()*255),b:Math.floor(Math.random()*255)})}
 function startAutoSim(){stopAutoSim();refreshSysState('play');autoSimTimer=setInterval(()=>sim(SIM_COLORS[Math.floor(Math.random()*4)]),1000)}
 function stopAutoSim(){if(autoSimTimer){clearInterval(autoSimTimer);autoSimTimer=null}}
 
@@ -1463,8 +1512,13 @@ applyI18n();
 refreshMqttUI();
 refreshSysState('unknown');
 setFbStatus(false);
-startHistoryListener();
-db.ref('.info/connected').on('value',snap=>setFbStatus(snap.val()===true));
+// History listener starts only when the user navigates to the history page
+db.ref('.info/connected').on('value',snap=>{
+  const ok=snap.val()===true;
+  // Only show green if truly connected to Firebase realtime DB
+  const dot=g('fbdot-d');if(dot)dot.className='chip-dot'+(ok?' on':'');
+  const lbl=g('fb-label-d');if(lbl)lbl.textContent='Firebase '+(ok?'✓':'○');
+});
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 const LOGIN_CODE='000000';
@@ -1552,60 +1606,7 @@ function doLogin(){
 })();
 
 // ── HISTORY: LOG ALL EVENTS (objects + commands + servo) ─────────────────────
-// Override sendCmd to log to Firebase
-const _origSendCmd=typeof sendCmd!=='undefined'?sendCmd:null;
-function sendCmd(cmd){
-  const topic=g('cfg-topic-cmd')?.value||'tri/commande';
-  if(mqttClient?.connected)mqttClient.publish(topic,JSON.stringify({commande:cmd,ts:Date.now()}));
-  refreshSysState(cmd==='play'?'play':cmd==='pause'?'pause':'stop');
-  histRef.push({type:'commande',action:cmd,timestamp:new Date().toISOString()})
-    .then(()=>{fbCount++;const el=g('fb-count');if(el)el.textContent=fbCount;})
-    .catch(()=>{});
-}
-// Override sendAngle to log to Firebase
-function sendAngle(angle){
-  const topic=g('cfg-topic-cmd')?.value||'tri/commande';
-  if(mqttClient?.connected)mqttClient.publish(topic,JSON.stringify({commande:'servo',angle,ts:Date.now()}));
-  updateServoDisplay(angle);
-  histRef.push({type:'servo',angle,timestamp:new Date().toISOString()})
-    .then(()=>{fbCount++;const el=g('fb-count');if(el)el.textContent=fbCount;})
-    .catch(()=>{});
-}
-
-// ── FIX HISTORY: render all event types ──────────────────────────────────────
-function renderHistory(){
-  const container=g('hist-list'),countEl=g('hist-count');
-  if(!container)return;
-  if(countEl)countEl.textContent=`${filteredEvents.length} event${filteredEvents.length!==1?'s':''}`;
-  if(filteredEvents.length===0){container.innerHTML=`<div class="hempty">${t('hist_empty')}</div>`;return}
-  const locale={fr:'fr-FR',en:'en-GB',de:'de-DE',zh:'zh-CN'}[lang]||'en-GB';
-  container.innerHTML=filteredEvents.map(e=>{
-    const date=new Date(e.timestamp);
-    const dateStr=isNaN(date.getTime())?e.timestamp:date.toLocaleString(locale);
-    let dot,col,det;
-    if(e.type==='commande'||(!e.type&&!e.couleur&&e.action)){
-      dot='#6c63ff';
-      const lbl={play:'▶ Play',pause:'⏸ Pause',stop:'⏹ Stop'};
-      col=`<span class="hcol" style="color:#6c63ff">${lbl[e.action]||e.action}</span>`;
-      det=`Belt command`;
-    } else if(e.type==='servo'){
-      dot='#ffb340';
-      col=`<span class="hcol" style="color:#ffb340">↻ Servo ${e.angle}°</span>`;
-      det=`Manual positioning`;
-    } else {
-      const hex=COLORS[e.couleur]?.hex||'#888';
-      dot=hex;
-      col=`<span class="hcol" style="color:${hex}">${getLabel(e.couleur)}</span>`;
-      det=`Bac #${e.bac} · ${e.servo}° · R${e.r||0} G${e.g||0} B${e.b||0}`;
-    }
-    return`<div class="hitem">
-      <span class="hdot" style="background:${dot}"></span>
-      <span class="htime">${dateStr}</span>
-      ${col}
-      <span class="hdet">${det}</span>
-    </div>`;
-  }).join('');
-}
+// sendCmd and sendAngle defined above — no duplicates
 
 // ── FIX CLEAR FIREBASE with password ─────────────────────────────────────────
 function clearFirebase(){
