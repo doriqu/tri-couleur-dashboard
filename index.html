@@ -1358,22 +1358,47 @@ function refreshHistory(){
 }
 
 function startHistoryListener(){
-  // Détacher l'ancien listener s'il existe pour forcer un rechargement propre
-  if(_histQuery){_histQuery.off('value');_histQuery=null;}
+  // Détacher l'ancien listener
+  if(_histQuery){try{_histQuery.off('value');}catch(e){}  _histQuery=null;}
   histListenerOn=true;
   const list=g('hist-list');
   if(list)list.innerHTML=`<div class="hempty">${t('hist_loading')}</div>`;
-  _histQuery=histRef.orderByChild('timestamp').limitToLast(100);
+
+  // Timeout de sécurité : si pas de réponse en 6s, afficher erreur
+  let gotData=false;
+  const timeout=setTimeout(()=>{
+    if(!gotData){
+      const l=g('hist-list');
+      if(l)l.innerHTML=`<div class="hempty">⏱ Timeout — vérifie les règles Firebase (lecture publique)</div>`;
+      setFbStatus(false);
+    }
+  },6000);
+
+  // Lecture sans orderByChild pour éviter l'erreur d'index manquant
+  _histQuery=histRef.limitToLast(100);
   _histQuery.on('value',snap=>{
+    gotData=true;
+    clearTimeout(timeout);
     allEvents=[];
-    snap.forEach(child=>allEvents.unshift({id:child.key,...child.val()}));
+    snap.forEach(child=>{
+      const val=child.val();
+      if(val && typeof val==='object') allEvents.push({id:child.key,...val});
+    });
+    // Tri côté client : plus récent en premier
+    allEvents.sort((a,b)=>{
+      const ta=a.timestamp?new Date(a.timestamp).getTime():0;
+      const tb=b.timestamp?new Date(b.timestamp).getTime():0;
+      return tb-ta;
+    });
     fbCount=allEvents.filter(e=>e.type==='objet'||!e.type).length;
     const el=g('fb-count');if(el)el.textContent=allEvents.length;
     setFbStatus(true);
     applyFilters();
   },err=>{
-    const list=g('hist-list');
-    if(list)list.innerHTML=`<div class="hempty">Firebase error — ${err.message}</div>`;
+    gotData=true;
+    clearTimeout(timeout);
+    const l=g('hist-list');
+    if(l)l.innerHTML=`<div class="hempty">❌ Firebase : ${err.message||err.code||'Erreur inconnue'}</div>`;
     setFbStatus(false);
   });
 }
@@ -1512,6 +1537,10 @@ applyI18n();
 refreshMqttUI();
 refreshSysState('unknown');
 setFbStatus(false);
+// Test de connectivité Firebase au démarrage (lecture .info/connected)
+firebase.database().ref('.info/connected').on('value', snap => {
+  setFbStatus(snap.val() === true);
+});
 // History listener starts only when the user navigates to the history page
 db.ref('.info/connected').on('value',snap=>{
   const ok=snap.val()===true;
